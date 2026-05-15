@@ -1,0 +1,98 @@
+name: Build RapidOCR CLI
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - release
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build ${{ matrix.artifact }}
+    runs-on: ${{ matrix.runner }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - artifact: rapidocr-linux-x86_64
+            runner: ubuntu-latest
+          - artifact: rapidocr-linux-arm64
+            runner: ubuntu-24.04-arm
+          - artifact: rapidocr-macos-arm64
+            runner: macos-14
+          - artifact: rapidocr-windows-x86_64
+            runner: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+          cache-dependency-glob: packaging/pyinstaller/uv.lock
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        working-directory: packaging/pyinstaller
+        run: uv sync --frozen
+
+      - name: Build standalone CLI
+        working-directory: packaging/pyinstaller
+        run: uv run python build_cli.py
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: packaging/pyinstaller/dist/${{ matrix.artifact }}/
+          if-no-files-found: error
+          retention-days: 7
+
+  release:
+    name: Publish GitHub Release
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+
+      - name: Create release archives
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-dist
+
+          for artifact_dir in release-artifacts/*; do
+            artifact_name="$(basename "$artifact_dir")"
+            case "$artifact_name" in
+              rapidocr-windows-*)
+                (cd release-artifacts && zip -r "../release-dist/${artifact_name}.zip" "$artifact_name")
+                ;;
+              *)
+                tar -czf "release-dist/${artifact_name}.tar.gz" -C release-artifacts "$artifact_name"
+                ;;
+            esac
+          done
+
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          generate_release_notes: true
+          files: release-dist/*
