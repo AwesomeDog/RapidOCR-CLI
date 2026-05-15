@@ -1,0 +1,26 @@
+[project]
+name = "rapidocr-cli-standalone"
+version = "0.1.0"
+description = "PyInstaller packaging project for the standalone RapidOCR CLI and server."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "pyinstaller>=6.11,<7",
+    "fastapi>=0.115,<1",
+    "uvicorn[standard]>=0.32,<1",
+    "pydantic>=2.7,<3",
+    "onnxruntime>=1.18,<2",
+    "opencv-python-headless>=4.10,<5",
+    "numpy>=1.26,<3",
+    "omegaconf>=2.3,<3",
+    "pyclipper>=1.2,<2",
+    "shapely>=2.0.6,<3",
+    "pyyaml>=6,<7",
+    "pillow>=10,<12",
+    "tqdm>=4.66,<5",
+    "requests>=2.31,<3",
+    "colorlog>=6.8,<7",
+    "six>=1.16,<2",
+]
+
+[tool.uv]
+package = false

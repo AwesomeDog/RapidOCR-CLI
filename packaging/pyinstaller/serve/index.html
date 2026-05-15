@@ -1,0 +1,1030 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>RapidOCR Web UI</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fb;
+      --panel: #ffffff;
+      --panel-soft: #f8fafc;
+      --text: #172033;
+      --muted: #667085;
+      --border: #d9e2ef;
+      --primary: #2563eb;
+      --primary-dark: #1d4ed8;
+      --primary-soft: #eff6ff;
+      --danger: #dc2626;
+      --danger-soft: #fef2f2;
+      --success: #16a34a;
+      --shadow: 0 20px 45px rgba(15, 23, 42, 0.08);
+      --radius: 18px;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(37, 99, 235, 0.16), transparent 34rem),
+        radial-gradient(circle at bottom right, rgba(22, 163, 74, 0.12), transparent 28rem),
+        var(--bg);
+    }
+
+    button,
+    input,
+    textarea {
+      font: inherit;
+    }
+
+    .page {
+      width: min(1180px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 40px 0 56px;
+    }
+
+    .hero {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 24px;
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      margin: 0 0 12px;
+      padding: 7px 12px;
+      border: 1px solid rgba(37, 99, 235, 0.18);
+      border-radius: 999px;
+      color: var(--primary-dark);
+      background: rgba(239, 246, 255, 0.8);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(32px, 5vw, 56px);
+      line-height: 1.02;
+      letter-spacing: -0.045em;
+    }
+
+    .subtitle {
+      max-width: 720px;
+      margin: 16px 0 0;
+      color: var(--muted);
+      font-size: 17px;
+      line-height: 1.65;
+    }
+
+    .status-pill {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      gap: 9px;
+      padding: 10px 14px;
+      border: 1px solid var(--border);
+      border-radius: 999px;
+      background: rgba(255, 255, 255, 0.76);
+      box-shadow: 0 8px 20px rgba(15, 23, 42, 0.05);
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--success);
+      box-shadow: 0 0 0 5px rgba(22, 163, 74, 0.14);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
+      gap: 24px;
+      align-items: start;
+    }
+
+    .card {
+      border: 1px solid rgba(217, 226, 239, 0.9);
+      border-radius: var(--radius);
+      background: rgba(255, 255, 255, 0.9);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+      backdrop-filter: blur(14px);
+    }
+
+    .card-header {
+      padding: 22px 24px 0;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 18px;
+      letter-spacing: -0.02em;
+    }
+
+    .card-description {
+      margin: 8px 0 0;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .card-body {
+      padding: 24px;
+    }
+
+    .drop-zone {
+      position: relative;
+      display: grid;
+      place-items: center;
+      min-height: 280px;
+      padding: 28px;
+      border: 2px dashed #b8c7dc;
+      border-radius: 16px;
+      background: linear-gradient(180deg, rgba(239, 246, 255, 0.72), rgba(248, 250, 252, 0.76));
+      text-align: center;
+      transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+    }
+
+    .drop-zone.is-dragover {
+      border-color: var(--primary);
+      background: var(--primary-soft);
+      transform: translateY(-2px);
+    }
+
+    .drop-zone.has-preview {
+      display: block;
+      padding: 14px;
+      background: #0f172a;
+      border-color: transparent;
+    }
+
+    .drop-zone input[type="file"] {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      opacity: 0;
+      cursor: pointer;
+    }
+
+    .upload-icon {
+      width: 70px;
+      height: 70px;
+      margin: 0 auto 18px;
+      display: grid;
+      place-items: center;
+      border-radius: 22px;
+      background: #ffffff;
+      color: var(--primary);
+      box-shadow: 0 14px 32px rgba(37, 99, 235, 0.16);
+    }
+
+    .upload-icon svg {
+      width: 34px;
+      height: 34px;
+    }
+
+    .drop-title {
+      margin: 0;
+      font-size: 18px;
+      font-weight: 800;
+    }
+
+    .drop-hint {
+      margin: 8px auto 0;
+      max-width: 330px;
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.6;
+    }
+
+    .preview-image {
+      display: none;
+      max-width: 100%;
+      max-height: 480px;
+      margin: 0 auto;
+      border-radius: 12px;
+      object-fit: contain;
+    }
+
+    .drop-zone.has-preview .preview-image {
+      display: block;
+    }
+
+    .drop-zone.has-preview .empty-state {
+      display: none;
+    }
+
+    .file-meta {
+      display: none;
+      margin-top: 14px;
+      padding: 12px 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel-soft);
+      color: var(--muted);
+      font-size: 14px;
+      line-height: 1.5;
+      word-break: break-word;
+    }
+
+    .file-meta.is-visible {
+      display: block;
+    }
+
+    .controls {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 14px;
+      margin-top: 18px;
+    }
+
+    .field {
+      display: grid;
+      gap: 7px;
+    }
+
+    .field label,
+    .option label {
+      color: #344054;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .field input[type="number"] {
+      width: 100%;
+      padding: 11px 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #ffffff;
+      color: var(--text);
+      outline: none;
+      transition: border-color 140ms ease, box-shadow 140ms ease;
+    }
+
+    .field input[type="number"]:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+    }
+
+    .options {
+      display: grid;
+      gap: 10px;
+      margin-top: 16px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel-soft);
+    }
+
+    .option {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: #344054;
+      font-size: 14px;
+    }
+
+    .option input {
+      width: 17px;
+      height: 17px;
+      accent-color: var(--primary);
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .button {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 9px;
+      min-height: 46px;
+      padding: 0 18px;
+      border: 0;
+      border-radius: 13px;
+      font-weight: 850;
+      cursor: pointer;
+      transition: transform 140ms ease, background 140ms ease, box-shadow 140ms ease, opacity 140ms ease;
+    }
+
+    .button:disabled {
+      opacity: 0.54;
+      cursor: not-allowed;
+      transform: none;
+      box-shadow: none;
+    }
+
+    .button:not(:disabled):hover {
+      transform: translateY(-1px);
+    }
+
+    .button-primary {
+      flex: 1 1 auto;
+      color: #ffffff;
+      background: var(--primary);
+      box-shadow: 0 14px 24px rgba(37, 99, 235, 0.24);
+    }
+
+    .button-primary:not(:disabled):hover {
+      background: var(--primary-dark);
+    }
+
+    .button-secondary {
+      flex: 0 0 auto;
+      color: #344054;
+      background: #eef2f7;
+    }
+
+    .spinner {
+      display: none;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255, 255, 255, 0.45);
+      border-top-color: #ffffff;
+      border-radius: 999px;
+      animation: spin 780ms linear infinite;
+    }
+
+    .is-loading .spinner {
+      display: inline-block;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    .alert {
+      display: none;
+      margin-bottom: 16px;
+      padding: 13px 14px;
+      border-radius: 14px;
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .alert.is-visible {
+      display: block;
+    }
+
+    .alert-error {
+      border: 1px solid rgba(220, 38, 38, 0.22);
+      color: #991b1b;
+      background: var(--danger-soft);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }
+
+    .summary-item {
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel-soft);
+    }
+
+    .summary-label {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+    }
+
+    .summary-value {
+      margin: 0;
+      font-size: 21px;
+      font-weight: 900;
+      letter-spacing: -0.03em;
+    }
+
+    .plain-text-panel {
+      display: grid;
+      gap: 12px;
+      margin-bottom: 18px;
+      padding: 14px;
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      background: var(--panel-soft);
+    }
+
+    .plain-text-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    .plain-text-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 900;
+      letter-spacing: -0.02em;
+    }
+
+    .plain-text-description {
+      margin: 5px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.45;
+    }
+
+    .copy-button {
+      min-height: 38px;
+      padding: 0 14px;
+      white-space: nowrap;
+    }
+
+    .plain-text-output {
+      width: 100%;
+      min-height: 130px;
+      padding: 12px;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: #ffffff;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.55;
+      resize: vertical;
+      outline: none;
+    }
+
+    .plain-text-output:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 4px rgba(37, 99, 235, 0.12);
+    }
+
+    .copy-feedback {
+      min-height: 18px;
+      margin: 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    details {
+      margin-top: 18px;
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      background: var(--panel-soft);
+      overflow: hidden;
+    }
+
+    summary {
+      padding: 13px 14px;
+      cursor: pointer;
+      color: #344054;
+      font-size: 14px;
+      font-weight: 850;
+    }
+
+    .raw-json {
+      margin: 0;
+      padding: 0 14px 14px;
+      color: #344054;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      font-size: 12px;
+      line-height: 1.55;
+      overflow-x: auto;
+      white-space: pre-wrap;
+    }
+
+    @media (max-width: 900px) {
+      .hero {
+        display: block;
+      }
+
+      .status-pill {
+        margin-top: 18px;
+      }
+
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    @media (max-width: 560px) {
+      .page {
+        width: min(100% - 20px, 1180px);
+        padding-top: 24px;
+      }
+
+      .controls,
+      .summary {
+        grid-template-columns: 1fr;
+      }
+
+      .actions {
+        flex-direction: column;
+      }
+
+      .button-secondary {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="page">
+    <section class="hero" aria-labelledby="page-title">
+      <div>
+        <p class="eyebrow">Standalone RapidOCR Server</p>
+        <h1 id="page-title">Drop an image and run OCR instantly.</h1>
+        <p class="subtitle">This page is bundled inside the RapidOCR binary. It sends a JSON request with a base64 image to <code>/api/ocr</code> and renders recognized text, confidence scores, and box coordinates. Choose, paste, or drop an image to start OCR automatically. The first request may take longer while models are downloaded or initialized.</p>
+      </div>
+      <div class="status-pill" title="The web UI was served successfully.">
+        <span class="status-dot" aria-hidden="true"></span>
+        Web UI ready
+      </div>
+    </section>
+
+    <section class="grid">
+      <article class="card">
+        <div class="card-header">
+          <h2 class="card-title">Input image</h2>
+          <p class="card-description">Drag and drop an image, paste one from your clipboard, or click the drop zone to choose a local file.</p>
+        </div>
+        <div class="card-body">
+          <div id="dropZone" class="drop-zone" role="button" tabindex="0" aria-label="Choose, paste, or drop an image file">
+            <input id="fileInput" type="file" accept="image/*" aria-label="Image file">
+            <div class="empty-state">
+              <div class="upload-icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 16V4"></path>
+                  <path d="m7 9 5-5 5 5"></path>
+                  <path d="M20 16.5v1.75A1.75 1.75 0 0 1 18.25 20H5.75A1.75 1.75 0 0 1 4 18.25V16.5"></path>
+                </svg>
+              </div>
+              <p class="drop-title">Drop or paste image here</p>
+              <p class="drop-hint">PNG, JPEG, GIF, BMP, TIFF, and other browser-supported image files are accepted. You can also paste a screenshot with Ctrl/⌘+V.</p>
+            </div>
+            <img id="previewImage" class="preview-image" alt="Selected image preview">
+          </div>
+
+          <div id="fileMeta" class="file-meta"></div>
+
+          <div class="controls" aria-label="OCR options">
+            <div class="field">
+              <label for="textScore">Text score threshold</label>
+              <input id="textScore" type="number" min="0" max="1" step="0.01" placeholder="Default">
+            </div>
+            <div class="field">
+              <label for="boxThresh">Box threshold</label>
+              <input id="boxThresh" type="number" min="0" max="1" step="0.01" placeholder="Default">
+            </div>
+          </div>
+
+          <div class="options">
+            <div class="option">
+              <input id="returnWordBox" type="checkbox">
+              <label for="returnWordBox">Return word boxes when available</label>
+            </div>
+            <div class="option">
+              <input id="returnSingleCharBox" type="checkbox">
+              <label for="returnSingleCharBox">Return single-character boxes when available</label>
+            </div>
+          </div>
+
+          <div class="actions">
+            <button id="runButton" class="button button-primary" type="button" disabled>
+              <span class="spinner" aria-hidden="true"></span>
+              <span id="runButtonText">Run OCR</span>
+            </button>
+            <button id="clearButton" class="button button-secondary" type="button" disabled>Clear</button>
+          </div>
+        </div>
+      </article>
+
+      <article class="card">
+        <div class="card-header">
+          <h2 class="card-title">OCR result</h2>
+          <p class="card-description">Results are shown as plain text for quick copying and raw JSON for integration testing.</p>
+        </div>
+        <div class="card-body">
+          <div id="errorBox" class="alert alert-error" role="alert"></div>
+
+          <div class="summary" aria-label="Result summary">
+            <div class="summary-item">
+              <p class="summary-label">Items</p>
+              <p id="summaryItems" class="summary-value">0</p>
+            </div>
+            <div class="summary-item">
+              <p class="summary-label">Elapsed</p>
+              <p id="summaryElapsed" class="summary-value">-</p>
+            </div>
+            <div class="summary-item">
+              <p class="summary-label">Status</p>
+              <p id="summaryStatus" class="summary-value">Idle</p>
+            </div>
+          </div>
+
+          <div id="plainTextPanel" class="plain-text-panel" hidden>
+            <div class="plain-text-header">
+              <div>
+                <h3 class="plain-text-title">Plain text</h3>
+                <p class="plain-text-description">OCR text only, without coordinates or JSON, ready to copy.</p>
+              </div>
+              <button id="copyTextButton" class="button button-secondary copy-button" type="button">Copy text</button>
+            </div>
+            <textarea id="plainTextOutput" class="plain-text-output" readonly aria-label="Plain OCR text without coordinates"></textarea>
+            <p id="copyFeedback" class="copy-feedback" role="status" aria-live="polite"></p>
+          </div>
+
+          <details id="rawPanel" hidden>
+            <summary>Raw JSON response</summary>
+            <pre id="rawJson" class="raw-json"></pre>
+          </details>
+        </div>
+      </article>
+    </section>
+  </main>
+
+  <script>
+    const state = {
+      selectedFile: null,
+      dataUrl: "",
+    };
+
+    const dropZone = document.getElementById("dropZone");
+    const fileInput = document.getElementById("fileInput");
+    const previewImage = document.getElementById("previewImage");
+    const fileMeta = document.getElementById("fileMeta");
+    const runButton = document.getElementById("runButton");
+    const runButtonText = document.getElementById("runButtonText");
+    const clearButton = document.getElementById("clearButton");
+    const returnWordBox = document.getElementById("returnWordBox");
+    const returnSingleCharBox = document.getElementById("returnSingleCharBox");
+    const textScore = document.getElementById("textScore");
+    const boxThresh = document.getElementById("boxThresh");
+    const errorBox = document.getElementById("errorBox");
+    const summaryItems = document.getElementById("summaryItems");
+    const summaryElapsed = document.getElementById("summaryElapsed");
+    const summaryStatus = document.getElementById("summaryStatus");
+    const rawPanel = document.getElementById("rawPanel");
+    const rawJson = document.getElementById("rawJson");
+    const plainTextPanel = document.getElementById("plainTextPanel");
+    const plainTextOutput = document.getElementById("plainTextOutput");
+    const copyTextButton = document.getElementById("copyTextButton");
+    const copyFeedback = document.getElementById("copyFeedback");
+    const IMAGE_FILE_EXTENSION = /\.(apng|avif|bmp|gif|ico|jfif|jpe?g|pjp|pjpeg|png|svg|tiff?|webp)$/i;
+
+    function formatBytes(bytes) {
+      if (!Number.isFinite(bytes) || bytes <= 0) {
+        return "0 B";
+      }
+
+      const units = ["B", "KB", "MB", "GB"];
+      const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+      const value = bytes / Math.pow(1024, exponent);
+      return `${value.toFixed(value >= 10 || exponent === 0 ? 0 : 1)} ${units[exponent]}`;
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function setLoading(isLoading) {
+      document.body.classList.toggle("is-loading", isLoading);
+      runButton.disabled = isLoading || !state.dataUrl;
+      clearButton.disabled = isLoading || !state.dataUrl;
+      runButtonText.textContent = isLoading ? "Running OCR..." : "Run OCR";
+      if (isLoading) {
+        summaryStatus.textContent = "Running";
+      }
+    }
+
+    function showError(message) {
+      if (!message) {
+        errorBox.classList.remove("is-visible");
+        errorBox.textContent = "";
+        return;
+      }
+
+      errorBox.textContent = message;
+      errorBox.classList.add("is-visible");
+      summaryStatus.textContent = "Error";
+    }
+
+    function resetResults() {
+      summaryItems.textContent = "0";
+      summaryElapsed.textContent = "-";
+      rawPanel.hidden = true;
+      rawJson.textContent = "";
+      plainTextPanel.hidden = true;
+      plainTextOutput.value = "";
+      copyTextButton.disabled = true;
+      copyFeedback.textContent = "";
+    }
+
+    function normalizeResults(response) {
+      if (Array.isArray(response?.results)) {
+        return response.results;
+      }
+
+      if (response?.results == null) {
+        return [];
+      }
+
+      return [response.results];
+    }
+
+    function formatScore(score) {
+      const number = Number(score);
+      if (!Number.isFinite(number)) {
+        return "";
+      }
+
+      return number <= 1 ? `${(number * 100).toFixed(1)}%` : number.toFixed(3);
+    }
+
+    function extractText(item) {
+      if (item == null) {
+        return "";
+      }
+
+      if (typeof item === "string") {
+        return item;
+      }
+
+      return item.txt ?? item.text ?? item.label ?? item.result ?? "";
+    }
+
+    function renderResults(response) {
+      const items = normalizeResults(response);
+      const elapsed = Number(response?.elapse);
+
+      summaryItems.textContent = String(items.length);
+      summaryElapsed.textContent = Number.isFinite(elapsed) ? `${elapsed.toFixed(3)}s` : "-";
+      summaryStatus.textContent = "Done";
+
+      rawJson.textContent = JSON.stringify(response, null, 2);
+      rawPanel.hidden = false;
+
+      const plainText = items
+        .map((item) => extractText(item).trim())
+        .filter(Boolean)
+        .join("\n");
+      plainTextOutput.value = plainText;
+      plainTextPanel.hidden = plainText.length === 0;
+      copyTextButton.disabled = plainText.length === 0;
+      copyFeedback.textContent = "";
+
+      if (items.length === 0) {
+        plainTextOutput.value = "No OCR text was detected in this image.";
+        plainTextPanel.hidden = false;
+        copyTextButton.disabled = true;
+      }
+    }
+
+    function dataUrlToBase64(dataUrl) {
+      const commaIndex = dataUrl.indexOf(",");
+      return commaIndex >= 0 ? dataUrl.slice(commaIndex + 1) : dataUrl;
+    }
+
+    function addNumberOption(payload, input, name) {
+      if (input.value.trim() === "") {
+        return;
+      }
+
+      const value = Number(input.value);
+      if (!Number.isFinite(value)) {
+        throw new Error(`${name} must be a number.`);
+      }
+
+      payload[name] = value;
+    }
+
+    function buildPayload() {
+      const payload = {
+        image: dataUrlToBase64(state.dataUrl),
+      };
+
+      if (returnWordBox.checked) {
+        payload.return_word_box = true;
+      }
+
+      if (returnSingleCharBox.checked) {
+        payload.return_single_char_box = true;
+      }
+
+      addNumberOption(payload, textScore, "text_score");
+      addNumberOption(payload, boxThresh, "box_thresh");
+      return payload;
+    }
+
+    function readFileAsDataUrl(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(String(reader.result || ""));
+        reader.onerror = () => reject(new Error("Failed to read the selected file."));
+        reader.readAsDataURL(file);
+      });
+    }
+
+    function isImageFile(file) {
+      return Boolean(file) && (file.type.startsWith("image/") || IMAGE_FILE_EXTENSION.test(file.name || ""));
+    }
+
+    function findImageFile(files) {
+      return Array.from(files || []).find(isImageFile) || null;
+    }
+
+    function getPastedImageFile(event) {
+      const fileFromClipboard = findImageFile(event.clipboardData?.files);
+      if (fileFromClipboard) {
+        return fileFromClipboard;
+      }
+
+      const imageItem = Array.from(event.clipboardData?.items || [])
+        .find((item) => item.kind === "file" && item.type.startsWith("image/"));
+      return imageItem?.getAsFile() || null;
+    }
+
+    async function chooseFile(file) {
+      showError("");
+      resetResults();
+
+      if (!file) {
+        return;
+      }
+
+      const isImageFile = file.type.startsWith("image/") || IMAGE_FILE_EXTENSION.test(file.name);
+      if (!isImageFile) {
+        showError("Please choose an image file.");
+        return;
+      }
+
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        state.selectedFile = file;
+        state.dataUrl = dataUrl;
+
+        const fileName = file.name || "pasted-image";
+        previewImage.src = dataUrl;
+        dropZone.classList.add("has-preview");
+        fileMeta.textContent = `${fileName} · ${formatBytes(file.size)} · ${file.type || "image"}`;
+        fileMeta.classList.add("is-visible");
+        runButton.disabled = false;
+        clearButton.disabled = false;
+        summaryStatus.textContent = "Ready";
+        await runOcr();
+      } catch (error) {
+        showError(error.message || "Failed to load the selected image.");
+      }
+    }
+
+    function clearAll() {
+      state.selectedFile = null;
+      state.dataUrl = "";
+      fileInput.value = "";
+      previewImage.removeAttribute("src");
+      dropZone.classList.remove("has-preview", "is-dragover");
+      fileMeta.classList.remove("is-visible");
+      fileMeta.textContent = "";
+      runButton.disabled = true;
+      clearButton.disabled = true;
+      showError("");
+      resetResults();
+      summaryStatus.textContent = "Idle";
+    }
+
+    async function runOcr() {
+      if (!state.dataUrl) {
+        showError("Please choose an image before running OCR.");
+        return;
+      }
+
+      setLoading(true);
+      showError("");
+
+      try {
+        const payload = buildPayload();
+        const response = await fetch("/api/ocr", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        });
+
+        const text = await response.text();
+        let data = null;
+        try {
+          data = text ? JSON.parse(text) : null;
+        } catch {
+          data = { detail: text || response.statusText };
+        }
+
+        if (!response.ok) {
+          const detail = data?.detail;
+          const message = typeof detail === "string" ? detail : JSON.stringify(detail || data);
+          throw new Error(message || `Request failed with HTTP ${response.status}.`);
+        }
+
+        renderResults(data || { results: [] });
+      } catch (error) {
+        showError(error.message || "OCR request failed.");
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    async function copyPlainText() {
+      const text = plainTextOutput.value;
+      if (!text.trim()) {
+        return;
+      }
+
+      try {
+        await navigator.clipboard.writeText(text);
+        copyFeedback.textContent = "Copied plain text to clipboard.";
+      } catch {
+        plainTextOutput.focus();
+        plainTextOutput.select();
+        copyFeedback.textContent = "Clipboard access was blocked. Press Ctrl/⌘+C to copy the selected text.";
+      }
+    }
+
+    fileInput.addEventListener("change", () => {
+      chooseFile(fileInput.files?.[0]);
+    });
+
+    dropZone.addEventListener("dragenter", (event) => {
+      event.preventDefault();
+      dropZone.classList.add("is-dragover");
+    });
+
+    dropZone.addEventListener("dragover", (event) => {
+      event.preventDefault();
+    });
+
+    dropZone.addEventListener("dragleave", (event) => {
+      if (!dropZone.contains(event.relatedTarget)) {
+        dropZone.classList.remove("is-dragover");
+      }
+    });
+
+    dropZone.addEventListener("drop", (event) => {
+      event.preventDefault();
+      dropZone.classList.remove("is-dragover");
+      const file = findImageFile(event.dataTransfer.files);
+      if (file) {
+        chooseFile(file);
+      } else {
+        showError("Drop an image file to run OCR.");
+      }
+    });
+
+    dropZone.addEventListener("keydown", (event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        event.preventDefault();
+        fileInput.click();
+      }
+    });
+
+    runButton.addEventListener("click", runOcr);
+    clearButton.addEventListener("click", clearAll);
+    copyTextButton.addEventListener("click", copyPlainText);
+
+    document.addEventListener("paste", (event) => {
+      const file = getPastedImageFile(event);
+      if (!file) {
+        return;
+      }
+
+      event.preventDefault();
+      chooseFile(file);
+    });
+  </script>
+</body>
+</html>
