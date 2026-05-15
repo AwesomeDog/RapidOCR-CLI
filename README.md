@@ -38,11 +38,20 @@ rapidocr-<os>-<arch>/
 
 Download the archive for your platform from the release page and extract it.
 
-Linux / macOS:
+Linux:
 
 ```bash
 tar -xzf rapidocr-<os>-<arch>.tar.gz
 cd rapidocr-<os>-<arch>
+./rapidocr --help
+```
+
+macOS:
+
+```bash
+tar -xzf rapidocr-macos-arm64.tar.gz
+xattr -dr com.apple.quarantine rapidocr-macos-arm64
+cd rapidocr-macos-arm64
 ./rapidocr --help
 ```
 
