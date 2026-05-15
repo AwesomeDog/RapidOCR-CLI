@@ -56,7 +56,7 @@ RapidOCR is **based on PaddleOCR models** but is **not the PaddleOCR CLI or pack
 | 3 | JSON-only API (base64 image) | Uniform with CLI params, no multipart complexity |
 | 4 | `sys.argv` intercept in `cli_entry.py` | Avoids touching upstream `parse_args()` |
 | 5 | Platform info in archive/folder name only | Executable stays stable across platforms; suits package managers |
-| 6 | Models not bundled in binary | Keeps download size small; models cached on first run |
+| 6 | Bundle upstream default ONNX models | Default OCR works offline; custom and non-default models still use cache/downloads |
 
 ---
 
@@ -96,15 +96,19 @@ Background usage: `nohup rapidocr serve --host 0.0.0.0 &`
 
 ## Model Management
 
-Models are **not bundled** in the binary. They are downloaded automatically on first run.
+The standalone artifact bundles the model files required by the current upstream default RapidOCR configuration. The build script resolves the enabled default OCR stages from upstream `config.yaml` against `default_models.yaml`, downloads those files into a local packaging cache, adds them as PyInstaller data files under `rapidocr/models/`, and validates checksums in the final artifact.
+
+At runtime, `cli_entry.py` copies bundled default models into the writable model cache if they are missing, then injects `model_root_dir` into the RapidOCR engine params before any upstream code runs. This keeps the runtime compatible with upstream lazy downloads while allowing the default OCR path to work without a network connection.
 
 | Item | Value |
 |---|---|
+| Bundled defaults | Current upstream default ONNX model set resolved from `config.yaml` + `default_models.yaml` |
+| Bundled artifact path | `_internal/rapidocr/models/` |
 | Default cache directory | `~/.cache/rapidocr/models/` |
 | Override | `RAPIDOCR_MODEL_DIR` environment variable |
-| Trigger | First OCR invocation or explicit `rapidocr download_models` |
+| Trigger | Bundled defaults seeded on startup; extra models download on first use or explicit `rapidocr download_models` |
 
-The entry point (`cli_entry.py`) creates the cache directory and injects `model_root_dir` into the RapidOCR engine params before any upstream code runs. This avoids modifying upstream `parse_args()`.
+`RAPIDOCR_MODEL_DIR` remains the highest-priority override. If users choose another language, model version, model type, or custom config that needs files not bundled with the artifact, RapidOCR downloads those additional files into the configured cache.
 
 ---
 
@@ -133,8 +137,8 @@ All new and modified files in this fork, grouped by location.
 
 | File | Purpose |
 |---|---|
-| `cli_entry.py` | PyInstaller entry point; sets up model cache dir, injects `model_root_dir`, delegates to upstream `parse_args()` and `RapidOCR` engine; handles subcommand dispatch for `config`, `download_models`, `check`, and default OCR with optional visualization |
-| `build_cli.py` | Build script; detects OS/arch, collects YAML data files from `python/rapidocr/`, invokes PyInstaller with hidden imports |
+| `cli_entry.py` | PyInstaller entry point; sets up model cache dir, seeds bundled default models into the writable cache, injects `model_root_dir`, delegates to upstream `parse_args()` and `RapidOCR` engine; handles subcommand dispatch for `config`, `download_models`, `check`, and default OCR with optional visualization |
+| `build_cli.py` | Build script; detects OS/arch, resolves and downloads upstream default OCR models, collects YAML/model data files from `python/rapidocr/`, invokes PyInstaller with hidden imports, validates bundled model checksums |
 | `pyproject.toml` | Locks Python 3.12, declares all runtime dependencies |
 
 ### `packaging/`
@@ -175,13 +179,13 @@ All new and modified files in this fork, grouped by location.
 | Choice | Why |
 |---|---|
 | `--onedir` (not `--onefile`) | Faster startup, easier to debug missing libs |
-| Models not bundled | Downloaded on first run to `~/.cache/rapidocr/models/` (~50 MB) |
+| Default ONNX models bundled | Default OCR works offline; additional/custom models download to `~/.cache/rapidocr/models/` |
 | Python 3.12 locked | Same ABI across all platforms |
 | `uv` as package manager | Fast, reproducible builds |
 
 ### Build
 
-Run from `packaging/pyinstaller/` using `uv run python build_cli.py`. The build script automatically detects OS and architecture, collects all `.yaml` config files from the upstream `python/rapidocr/` package as data files, and invokes PyInstaller with the correct hidden imports and collection flags.
+Run from `packaging/pyinstaller/` using `uv run python build_cli.py`. The build script automatically detects OS and architecture, resolves the upstream default OCR model set, downloads and verifies those models in `packaging/pyinstaller/build/model_cache/`, collects all `.yaml` config files and bundled model files as data files, and invokes PyInstaller with the correct hidden imports and collection flags.
 
 ### CI/CD Pipeline
 
@@ -207,6 +211,7 @@ Trigger: manual `workflow_dispatch` or push tag matching `v*`.
 rapidocr-<os>-<arch>/
   rapidocr(.exe)        ← canonical entry point
   _internal/            ← bundled Python runtime and dependencies
+    rapidocr/models/    ← bundled upstream default OCR models
 ```
 
 ### Download and Run

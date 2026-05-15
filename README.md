@@ -9,7 +9,7 @@ RapidOCR uses PaddleOCR-derived OCR models converted to ONNX format for lightwei
 - **Easy to deploy**: extract one archive and run `rapidocr`; no system Python required.
 - **Cross-platform**: builds target Linux, macOS, and Windows.
 - **PaddleOCR model compatibility**: uses PaddleOCR-derived ONNX models and can deploy models fine-tuned through PaddleOCR after conversion/configuration.
-- **Small artifacts**: OCR models are not bundled; they download on first OCR use or via `rapidocr download_models`.
+- **Offline default OCR**: the upstream default ONNX models are bundled and copied into the writable cache on startup.
 - **CLI and server modes**: use local file OCR from the terminal or start an HTTP API with a bundled web UI.
 
 ## Supported Artifacts
@@ -29,6 +29,7 @@ Expected layout:
 rapidocr-<os>-<arch>/
   rapidocr(.exe)
   _internal/
+    rapidocr/models/
 ```
 
 ## Quick Start
@@ -161,7 +162,7 @@ No separate frontend build or static file server is required.
 
 ## Model Management
 
-Models are not bundled in the standalone artifact. This keeps downloads small and makes deployment predictable.
+The standalone artifact bundles the ONNX model files required by the current upstream default RapidOCR configuration. On startup, the CLI copies those bundled defaults into the writable model cache if they are missing, then RapidOCR loads models from that cache.
 
 Default model cache:
 
@@ -179,10 +180,11 @@ export RAPIDOCR_MODEL_DIR=/opt/rapidocr/models
 
 Behavior:
 
-- First OCR call automatically downloads missing models.
-- `rapidocr download_models` downloads models explicitly.
+- Default OCR can run without downloading the bundled default models at runtime.
+- `rapidocr download_models` still downloads explicitly requested or non-default models into the configured cache.
+- Choosing another language, OCR version, model type, or custom config may download additional model files.
 - CLI mode and server mode use the same cache location.
-- PyInstaller artifacts are validated so OCR model files are not accidentally bundled.
+- PyInstaller artifacts are validated so bundled default model files are present and match upstream checksums.
 
 ## PaddleOCR Model Notes
 
@@ -192,7 +194,8 @@ This means:
 
 - Target machines do not need PaddlePaddle installed.
 - Target machines do not need Python installed.
-- Models can stay outside the binary and be managed through the RapidOCR model cache.
+- Default models are bundled with the artifact and seeded into the RapidOCR model cache.
+- Additional or custom models can still be managed through the RapidOCR model cache.
 - PaddleOCR-trained or fine-tuned models can be deployed through RapidOCR when converted/configured for the supported RapidOCR runtime.
 
 ## Build from Source
@@ -222,12 +225,15 @@ packaging/pyinstaller/dist/rapidocr-<os>-<arch>/
 The build script automatically:
 
 - Detects OS and architecture.
+- Resolves the upstream default OCR model set from `config.yaml` and `default_models.yaml`.
+- Downloads and verifies those default models in `packaging/pyinstaller/build/model_cache/`.
 - Uses PyInstaller `--onedir` for faster startup and easier debugging.
 - Includes RapidOCR YAML config files.
+- Includes bundled default ONNX model files.
 - Includes the bundled server Web UI.
 - Collects ONNX Runtime binaries.
 - Excludes heavyweight optional backends such as Paddle, TensorRT, Torch, OpenVINO, and MNN.
-- Fails if OCR model files are found inside the artifact.
+- Validates bundled default model checksums in the final artifact.
 
 ## Smoke Test
 
@@ -260,5 +266,5 @@ Also verify the web UI at `http://127.0.0.1:9003/` and API docs at `http://127.0
 - **Desktop use**: run `rapidocr serve --open` and use the browser UI.
 - **Local automation**: call `rapidocr path/to/image.png` directly from scripts.
 - **Server use**: run `rapidocr serve --host 0.0.0.0 --port 9003` behind your process manager or reverse proxy.
-- **Containers**: mount `RAPIDOCR_MODEL_DIR` as a persistent volume to avoid downloading models on every container start.
-- **Offline environments**: run `rapidocr download_models` once in a connected environment, then copy the model cache to the target machine and set `RAPIDOCR_MODEL_DIR`.
+- **Containers**: mount `RAPIDOCR_MODEL_DIR` as a persistent volume if you need extra or custom models across container starts.
+- **Offline environments**: the default OCR models are already bundled; for non-default models, run `rapidocr download_models` once in a connected environment, then copy the model cache to the target machine and set `RAPIDOCR_MODEL_DIR`.

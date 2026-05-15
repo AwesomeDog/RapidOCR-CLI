@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import shutil
 import sys
 import threading
 import webbrowser
@@ -12,6 +13,7 @@ from typing import Dict, List, Optional
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 9003
 MODEL_DIR_ENV_VAR = "RAPIDOCR_MODEL_DIR"
+BUNDLED_MODEL_DIR = Path("rapidocr") / "models"
 
 
 def _freeze_multiprocessing_support() -> None:
@@ -114,10 +116,28 @@ def resolve_model_cache_dir() -> Path:
 
 
 def ensure_model_cache_dir() -> Path:
-    """Create and return the model cache directory used by all entry points."""
+    """Create the model cache directory and seed bundled defaults when available."""
     model_cache_dir = resolve_model_cache_dir()
     model_cache_dir.mkdir(parents=True, exist_ok=True)
+    seed_model_cache_from_bundle(model_cache_dir)
     return model_cache_dir
+
+
+def seed_model_cache_from_bundle(model_cache_dir: Path) -> None:
+    """Copy bundled default models into the writable cache without overwriting users."""
+    bundled_model_dir = bundled_path(BUNDLED_MODEL_DIR)
+    if not bundled_model_dir.is_dir():
+        return
+
+    for bundled_model_file in sorted(bundled_model_dir.iterdir()):
+        if not bundled_model_file.is_file():
+            continue
+
+        cache_model_file = model_cache_dir / bundled_model_file.name
+        if cache_model_file.exists():
+            continue
+
+        shutil.copy2(bundled_model_file, cache_model_file)
 
 
 def model_cache_params() -> Dict[str, str]:

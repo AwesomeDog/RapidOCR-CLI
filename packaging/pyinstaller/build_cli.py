@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import hashlib
 import os
 import platform
 import shutil
+import sys
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Iterable, List, Sequence
+from typing import Dict, Iterable, List, Optional, Sequence
 
 
 EXECUTABLE_NAME = "rapidocr"
@@ -19,20 +22,15 @@ ENTRY_SCRIPT = PACKAGING_DIR / "cli_entry.py"
 SERVE_INDEX_HTML = PACKAGING_DIR / "serve" / "index.html"
 DIST_DIR = PACKAGING_DIR / "dist"
 BUILD_DIR = PACKAGING_DIR / "build"
-
-MODEL_FILE_SUFFIXES = {
-    ".engine",
-    ".mnn",
-    ".nb",
-    ".onnx",
-    ".pdiparams",
-    ".pdmodel",
-    ".pdparams",
-    ".plan",
-    ".pt",
-    ".pth",
-    ".safetensors",
-}
+PYINSTALLER_BUILD_DIR = BUILD_DIR / "pyinstaller"
+MODEL_CACHE_DIR = BUILD_DIR / "model_cache"
+BUNDLED_MODEL_DESTINATION = Path("rapidocr") / "models"
+SUPPORTED_BUNDLED_ENGINE = "onnxruntime"
+DEFAULT_MODEL_SECTIONS = (
+    ("Det", "use_det"),
+    ("Cls", "use_cls"),
+    ("Rec", "use_rec"),
+)
 
 HIDDEN_IMPORTS = [
     "serve",
@@ -139,6 +137,18 @@ class DataFile:
         return self.destination / self.source.name
 
 
+@dataclass(frozen=True)
+class BundledModelFile:
+    url: str
+    source: Path
+    destination: Path
+    sha256: Optional[str] = None
+
+    @property
+    def runtime_relative_path(self) -> Path:
+        return self.destination / self.source.name
+
+
 def detect_os() -> str:
     system_name = platform.system().lower()
     if system_name == "linux":
@@ -171,7 +181,130 @@ def executable_filename(os_name: str) -> str:
     return EXECUTABLE_NAME
 
 
-def collect_data_files() -> List[DataFile]:
+def ensure_repo_python_on_sys_path() -> None:
+    python_dir_str = str(PYTHON_DIR)
+    if python_dir_str not in sys.path:
+        sys.path.insert(0, python_dir_str)
+
+
+def cache_file_from_url(url: str) -> Path:
+    return MODEL_CACHE_DIR / Path(url).name
+
+
+def file_sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as file:
+        for chunk in iter(lambda: file.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def add_bundled_model_file(
+    model_files: Dict[Path, BundledModelFile],
+    url: str,
+    sha256: Optional[str],
+) -> None:
+    source = cache_file_from_url(url)
+    runtime_relative_path = BUNDLED_MODEL_DESTINATION / source.name
+    existing = model_files.get(runtime_relative_path)
+    if existing is not None:
+        if existing.url != url or (
+            existing.sha256 is not None
+            and sha256 is not None
+            and existing.sha256 != sha256
+        ):
+            raise RuntimeError(
+                "Conflicting bundled model metadata for "
+                f"{runtime_relative_path}: {existing.url} vs {url}"
+            )
+        return
+
+    model_files[runtime_relative_path] = BundledModelFile(
+        url=url,
+        source=source,
+        destination=BUNDLED_MODEL_DESTINATION,
+        sha256=sha256,
+    )
+
+
+def resolve_default_model_files() -> List[BundledModelFile]:
+    """Use RapidOCR's default model resolver to determine files to bundle."""
+    ensure_repo_python_on_sys_path()
+
+    from rapidocr.inference_engine.base import FileInfo, InferSession
+    from rapidocr.utils.parse_parameters import ParseParams
+
+    cfg = ParseParams.load(RAPIDOCR_PACKAGE_DIR / "config.yaml")
+    model_files: Dict[Path, BundledModelFile] = {}
+
+    for section_name, use_key in DEFAULT_MODEL_SECTIONS:
+        if not cfg.Global.get(use_key, True):
+            continue
+
+        section = getattr(cfg, section_name)
+        if section.get("model_path"):
+            raise RuntimeError(
+                "Bundled default model resolution expects upstream defaults to use "
+                f"model_root_dir, but {section_name}.model_path is set."
+            )
+
+        engine_type = section.engine_type.value
+        if engine_type != SUPPORTED_BUNDLED_ENGINE:
+            raise RuntimeError(
+                "Standalone PyInstaller packaging currently supports bundled "
+                f"{SUPPORTED_BUNDLED_ENGINE} defaults only, but {section_name} "
+                f"uses {engine_type}."
+            )
+
+        model_info = InferSession.get_model_url(
+            FileInfo(
+                section.engine_type,
+                section.ocr_version,
+                section.task_type,
+                section.lang_type,
+                section.model_type,
+            )
+        )
+        add_bundled_model_file(
+            model_files,
+            model_info["model_dir"],
+            model_info.get("SHA256"),
+        )
+
+        if section_name == "Rec":
+            dict_url = model_info.get("dict_url")
+            if dict_url:
+                add_bundled_model_file(model_files, dict_url, None)
+
+    if not model_files:
+        raise RuntimeError("No default OCR models were resolved for bundling.")
+
+    return [model_files[path] for path in sorted(model_files)]
+
+
+def download_bundled_model_files() -> None:
+    """Download defaults through RapidOCR's own download_models implementation."""
+    ensure_repo_python_on_sys_path()
+
+    from omegaconf import OmegaConf
+    from rapidocr.utils.download_models import download_models
+
+    cfg = OmegaConf.load(RAPIDOCR_PACKAGE_DIR / "config.yaml")
+    cfg.Global.model_root_dir = str(MODEL_CACHE_DIR)
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        download_config_path = Path(temp_dir) / "config.yaml"
+        OmegaConf.save(config=cfg, f=download_config_path)
+        download_models(download_config_path)
+
+
+def prepare_bundled_default_models() -> List[BundledModelFile]:
+    model_files = resolve_default_model_files()
+    download_bundled_model_files()
+    return model_files
+
+
+def collect_data_files(model_files: Sequence[BundledModelFile]) -> List[DataFile]:
     data_files: List[DataFile] = []
 
     for yaml_path in sorted(RAPIDOCR_PACKAGE_DIR.rglob("*.yaml")):
@@ -184,6 +317,11 @@ def collect_data_files() -> List[DataFile]:
                 source=yaml_path,
                 destination=Path("rapidocr") / relative_path.parent,
             )
+        )
+
+    for model_file in model_files:
+        data_files.append(
+            DataFile(source=model_file.source, destination=model_file.destination)
         )
 
     data_files.append(DataFile(source=SERVE_INDEX_HTML, destination=Path("serve")))
@@ -206,7 +344,7 @@ def ensure_required_paths(data_files: Sequence[DataFile]) -> None:
 
 
 def clean_previous_outputs() -> None:
-    for path in (DIST_DIR, BUILD_DIR):
+    for path in (DIST_DIR, PYINSTALLER_BUILD_DIR):
         if path.exists():
             shutil.rmtree(path)
 
@@ -223,9 +361,9 @@ def build_pyinstaller_args(data_files: Sequence[DataFile]) -> List[str]:
         "--distpath",
         str(DIST_DIR),
         "--workpath",
-        str(BUILD_DIR),
+        str(PYINSTALLER_BUILD_DIR),
         "--specpath",
-        str(BUILD_DIR),
+        str(PYINSTALLER_BUILD_DIR),
         "--paths",
         str(PYTHON_DIR),
         "--paths",
@@ -274,24 +412,22 @@ def finalize_artifact(final_artifact_name: str) -> Path:
 
 
 def runtime_file_exists(artifact_dir: Path, relative_path: Path) -> bool:
-    return any(
-        (root / relative_path).exists()
-        for root in (artifact_dir / CONTENTS_DIR_NAME, artifact_dir)
-    )
+    return find_runtime_file(artifact_dir, relative_path) is not None
 
 
-def find_bundled_model_files(artifact_dir: Path) -> List[Path]:
-    return sorted(
-        path
-        for path in artifact_dir.rglob("*")
-        if path.is_file() and path.suffix.lower() in MODEL_FILE_SUFFIXES
-    )
+def find_runtime_file(artifact_dir: Path, relative_path: Path) -> Optional[Path]:
+    for root in (artifact_dir / CONTENTS_DIR_NAME, artifact_dir):
+        candidate = root / relative_path
+        if candidate.exists():
+            return candidate
+    return None
 
 
 def validate_artifact(
     artifact_dir: Path,
     os_name: str,
     data_files: Iterable[DataFile],
+    bundled_model_files: Sequence[BundledModelFile],
 ) -> None:
     executable_path = artifact_dir / executable_filename(os_name)
     internal_dir = artifact_dir / CONTENTS_DIR_NAME
@@ -311,17 +447,27 @@ def validate_artifact(
         missing_list = "\n".join(f"  - {path}" for path in missing_runtime_files)
         raise FileNotFoundError(f"Expected runtime data files are missing:\n{missing_list}")
 
-    bundled_model_files = find_bundled_model_files(artifact_dir)
-    if bundled_model_files:
-        model_list = "\n".join(f"  - {path}" for path in bundled_model_files)
-        raise RuntimeError(f"OCR model files must not be bundled:\n{model_list}")
+    invalid_model_files = []
+    for model_file in bundled_model_files:
+        runtime_path = find_runtime_file(artifact_dir, model_file.runtime_relative_path)
+        if runtime_path is None or not model_file.sha256:
+            continue
+
+        if file_sha256(runtime_path) != model_file.sha256:
+            invalid_model_files.append(runtime_path)
+
+    if invalid_model_files:
+        invalid_list = "\n".join(f"  - {path}" for path in invalid_model_files)
+        raise RuntimeError(f"Bundled OCR model checksum mismatch:\n{invalid_list}")
 
 
 def main() -> None:
     os_name = detect_os()
     architecture = detect_architecture()
     final_artifact_name = artifact_name(os_name, architecture)
-    data_files = collect_data_files()
+    print("Preparing bundled default OCR models...")
+    bundled_model_files = prepare_bundled_default_models()
+    data_files = collect_data_files(bundled_model_files)
 
     ensure_required_paths(data_files)
     clean_previous_outputs()
@@ -331,7 +477,7 @@ def main() -> None:
     run_pyinstaller(pyinstaller_args)
 
     artifact_dir = finalize_artifact(final_artifact_name)
-    validate_artifact(artifact_dir, os_name, data_files)
+    validate_artifact(artifact_dir, os_name, data_files, bundled_model_files)
     print(f"Created {artifact_dir}")
 
 
